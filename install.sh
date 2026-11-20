@@ -33,6 +33,73 @@ fi
 [ -n "$key" ] ||
   fail "no API key — set MANICODE_REGISTRY_API_KEY, or run in a terminal to be asked for it; nothing was written"
 
+# The forge command goes where Claude Code's own installer puts claude. A
+# forge whose second line isn't the marker belongs to another tool and is
+# left alone. Nothing here stops the install.
+CLI_DIR="$HOME/.local/bin"
+CLI_PATH="$CLI_DIR/forge"
+CLI_MARKER="// Installed by the Manicode forge installer."
+
+write_cli() {
+  mkdir -p "$CLI_DIR" &&
+    {
+      printf '#!/usr/bin/env node\n%s\n' "$CLI_MARKER"
+      cat <<'FORGE_CLI'
+// Copyright (c) 2026 Manicode Worldwide, Inc. Proprietary and confidential.
+
+// cli/forge.js
+var VERSION = true ? "0.8.0" : "dev";
+var USAGE = `forge: Manicode prompts for Claude Code
+
+Usage: forge [options]
+
+Options:
+  -h, --help     Show this help
+  -v, --version  Show the forge version
+`;
+function main() {
+  const [arg] = process.argv.slice(2);
+  switch (arg) {
+    case void 0:
+    case "-h":
+    case "--help":
+      process.stdout.write(USAGE);
+      return;
+    case "-v":
+    case "--version":
+      console.log(`forge ${VERSION}`);
+      return;
+    default:
+      console.error(`forge: unknown argument: ${arg}`);
+      process.stderr.write(USAGE);
+      process.exitCode = 1;
+  }
+}
+main();
+FORGE_CLI
+    } >"$CLI_PATH" &&
+    chmod 755 "$CLI_PATH"
+}
+
+install_cli() {
+  if [ -e "$CLI_PATH" ] && [ "$(sed -n 2p "$CLI_PATH" 2>/dev/null)" != "$CLI_MARKER" ]; then
+    echo "forge install: ~/.local/bin/forge belongs to another tool; forge command not installed" >&2
+    return
+  fi
+  local error
+  if ! error="$(write_cli 2>&1)"; then
+    echo "forge install: forge command not installed: ${error:-could not write $CLI_PATH}" >&2
+    return
+  fi
+  echo "forge install: installed the forge command to ~/.local/bin/forge"
+  case ":$PATH:" in
+    *":$CLI_DIR:"*) ;;
+    *) echo "forge install: ~/.local/bin is not on your PATH; add this line to your shell's startup file, then open a new terminal: export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+  esac
+}
+
+install_cli
+
 MANICODE_REGISTRY_API_KEY="$key" node - <<'NODE'
 // installer/write-claude-settings.js
 var { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
